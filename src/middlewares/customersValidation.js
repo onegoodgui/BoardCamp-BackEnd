@@ -6,6 +6,7 @@ dayjs.extend(isBetween);
 export async function customersValidation(req, res, next){
 
     const customer  = req.body;
+    customer.birthday = dayjs(customer.birthday).format('YYYY-MM-DD');
     
     const validation = customerSchema.validate(customer);
     if(validation.error){

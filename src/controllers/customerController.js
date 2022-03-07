@@ -56,6 +56,7 @@ export async function getCustomers(req, res){
 export async function updateCustomer(req, res){
 
     const {id} = req.params;
+    const customer = req.body;
 
     try{
         
@@ -65,7 +66,7 @@ export async function updateCustomer(req, res){
         } 
     
                 
-        const cpfQuery = await db.query(`SELECT cpf FROM customers WHERE NOT id = $1`, [id]);
+        const cpfQuery = await db.query(`SELECT cpf FROM customers WHERE NOT id = $1 AND cpf = $2`, [id, customer.cpf]);
         const existingCPF = cpfQuery.rows;
     
         if(existingCPF.length === 1){

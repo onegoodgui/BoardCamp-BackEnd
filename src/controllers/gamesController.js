@@ -24,16 +24,34 @@ export async function insertGame(req, res){
 
 export async function getGames(req, res){
 
+    let offset = '';
+    if (req.query.offset) {
+        offset = `OFFSET ${req.query.offset}`;
+    }
+
+    let limit = '';
+    if (req.query.limit) {
+        limit = `LIMIT ${req.query.limit}`;
+    }  
+
 
     try{
-        if(Object.keys(req.query)=== undefined){
+        if(Object.keys(req.query) !== undefined){
             const {name} = req.query;
             const gameQuery = await db.query(
-                `SELECT games.*,categories.* from games 
-                    WHERE lower(name) LIKE lower('%${name}%')
-                    JOIN categories ON games."categoryId" = categories.id
-                `
-                        
+                `SELECT 
+                    games.*, 
+                    categories.name AS "categoryName" 
+                    FROM 
+                        games 
+                        JOIN 
+                            categories 
+                            ON 
+                                games."categoryId" = categories.id
+                        WHERE 
+                            lower(games.name) LIKE lower('%${name}%')
+                    
+                `         
             );
             const games = gameQuery.rows;
             res.status(200).send(games);
