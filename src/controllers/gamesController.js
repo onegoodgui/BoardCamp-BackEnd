@@ -40,16 +40,19 @@ export async function getGames(req, res){
             const {name} = req.query;
             const gameQuery = await db.query(
                 `SELECT 
-                    games.*, 
-                    categories.name AS "categoryName" 
-                    FROM 
-                        games 
-                        JOIN 
-                            categories 
-                        ON 
-                            games."categoryId" = categories.id
-                    WHERE 
-                        lower(games.name) LIKE lower('%${name}%')
+                    games.*,
+                    categories.id AS "categoryId",  
+                    categories.name AS "categoryName",
+                    COUNT(rentals) AS "rentalsCount" 
+                FROM games 
+                    LEFT JOIN categories 
+                        ON games."categoryId" = categories.id 
+                    LEFT JOIN rentals
+                        ON rentals."gameId" = games.id
+                WHERE 
+                    lower(games.name) LIKE lower('%${name}%')
+                GROUP BY
+                    games.id, categories.id
                  ${offset}
                  ${limit}
                     
@@ -60,18 +63,24 @@ export async function getGames(req, res){
             return
         }
         
-       const categories = await db.query(   
+       const games = await db.query(   
            `SELECT games.*, 
                 categories.id AS "categoryId", 
-                categories.name AS "categoryName" 
+                categories.name AS "categoryName",
+                COUNT(rentals) AS "rentalsCount"
             FROM games 
-            JOIN categories 
-                ON games."categoryId"=categories.id
+                LEFT JOIN categories 
+                    ON games."categoryId" = categories.id 
+                LEFT JOIN rentals
+                    ON rentals."gameId" = games.id
+            GROUP BY
+                games.id, categories.id
+
             ${offset}
             ${limit}
             `
        );
-        res.status(201).send(categories.rows);
+        res.status(201).send(games.rows);
     }
     catch(error){
         res.status(500).send(error);
