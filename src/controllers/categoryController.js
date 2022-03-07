@@ -21,8 +21,24 @@ export async function insertCategory(req, res){
 
 export async function getCategories(req, res){
 
+    let offset = '';
+    if (req.query.offset) {
+        offset = `OFFSET ${req.query.offset}`;
+    }
+
+    let limit = '';
+    if (req.query.limit) {
+        limit = `LIMIT ${req.query.limit}`;
+    }  
+
     try{
-       const categories = await db.query('SELECT * from categories');
+       const categories = await db.query(
+           `SELECT * 
+            FROM 
+                categories
+            ${limit}
+            ${offset}`
+        );
         res.status(201).send(categories.rows);
     }
     catch(error){

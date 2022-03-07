@@ -21,19 +21,46 @@ export async function insertCustomer(req, res){
 
 export async function getCustomers(req, res){
 
+    let offset = '';
+    if (req.query.offset) {
+        offset = `OFFSET ${req.query.offset}`;
+    }
+
+    let limit = '';
+    if (req.query.limit) {
+        limit = `LIMIT ${req.query.limit}`;
+    }  
+
     try{
         if(req.query.cpf){
             
             const {cpf} = req.query;
-            const cpfQuery = await db.query(`SELECT * FROM customers WHERE cpf LIKE '${cpf}%'`);
+            const cpfQuery = await db.query(
+                `SELECT * 
+                 FROM 
+                    customers 
+                 WHERE 
+                    cpf LIKE '${cpf}%'
+                ${offset}
+                ${limit}
+            `);
             const CPF_List = cpfQuery.rows;
             res.send(CPF_List);
             return
 
         }
         if(req.params.id){
+            
             const {id} = req.params
-            const idQuery = await db.query(`SELECT * from customers where id = $1`, [id]);
+
+            const idQuery = await db.query(
+                `SELECT * 
+                FROM 
+                    customers 
+                WHERE 
+                    id = $1`
+            , [id]);
+
             const selectedUser = idQuery.rows;
             if(selectedUser.length === 0){
                 res.status(404).send('ID de usuário inexistente');
@@ -43,7 +70,12 @@ export async function getCustomers(req, res){
             return
         }
 
-        const customersQuery = await db.query('SELECT * FROM customers');
+        const customersQuery = await db.query(
+            `SELECT * 
+            FROM 
+                customers
+            ${limit}
+            ${offset}`);
         const customersList = customersQuery.rows;
         res.send(customersList);
 

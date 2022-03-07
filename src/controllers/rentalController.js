@@ -9,19 +9,49 @@ export async function insertRental(req, res){
     try{
 
         const existenceValidation = await db.query(
-            `SELECT customers.id, games.id 
-            FROM rentals
-                JOIN games
-                    ON games.id = $1
-                JOIN customers
-                    ON customers.id = $2`
-        ,[gameId, customerId])
-        
-        if(existenceValidation.rows.length > 0){
+            `SELECT 
+                customers.id AS customerId, games.id AS gameId
+            FROM games
+            JOIN customers
+                ON customers.id = $1
+            WHERE games.id = $2`               
+        ,[customerId, gameId])
+    
+        if(existenceValidation.rows.length === 0){
             res.status(400).send();
             return
         }
 
+        const availabilityQuery = await db.query(
+            `SELECT
+                rentals."returnDate", rentals."rentDate"
+            FROM 
+                rentals
+            WHERE rentals."gameId" = $1`,
+            [gameId]
+        )
+        const availability = availabilityQuery.rows;
+        let count = 0;
+
+        for(let i=0; i< availability.length; i++){
+            if(availability[i].returnDate === null && availability[i].rentDate !== null){
+                count ++
+            }
+        }
+
+        const stockTotalQuery = await db.query(
+            `SELECT "stockTotal"
+             FROM games
+             WHERE games.id = $1
+            `
+            ,[gameId]
+        )
+        const {stockTotal} = stockTotalQuery.rows[0];
+
+        if(count === stockTotal){
+            res.status(400).send('Todos os jogos estão alugados no momento');
+            return
+        }
 
         const rentalFeeQuery = await db.query(
             `SELECT games."pricePerDay" FROM games WHERE games.id = $1` 
@@ -49,44 +79,79 @@ export async function insertRental(req, res){
 
 export async function getRentals(req, res){
 
+    let offset = '';
+    if (req.query.offset) {
+        offset = `OFFSET ${req.query.offset}`;
+    }
+
+    let limit = '';
+    if (req.query.limit) {
+        limit = `LIMIT ${req.query.limit}`;
+    }  
+
     try{
         let rentalsQuery = '';
 
         if(req.query.customerId){
-            rentalsQuery = await db.query(`SELECT * from rentals WHERE "customerId" = $1`,[req.query.customerId]);
+            rentalsQuery = await db.query(
+                `SELECT * 
+                FROM 
+                    rentals 
+                WHERE 
+                    "customerId" = $1
+                ${limit}
+                ${offset}`
+            ,[req.query.customerId]
+            );
         }
         else if(req.query.gameId){
-            rentalsQuery = await db.query(`SELECT * from rentals WHERE "gameId" = $1`, [req.query.gameId]);
+            rentalsQuery = await db.query(
+                `SELECT *
+                 FROM 
+                    rentals
+                 WHERE
+                    "gameId" = $1
+                ${limit}
+                ${offset}`
+            ,[req.query.gameId]
+            );
         }
         else{
-            rentalsQuery = await db.query(`SELECT * from rentals`);
+            rentalsQuery = await db.query(
+                `SELECT *
+                 FROM 
+                    rentals
+                ${limit}
+                ${offset}`
+            );
         }
         
         const customersQuery = await db.query(`SELECT * FROM customers`);
         const categoriesQuery = await db.query(`SELECT * from categories`)
         const gamesQuery = await db.query('SELECT * FROM games');
 
-        const rentalsJSON = rentalsQuery.rows.map((rental, index) => {
+        const rentalsJSON = rentalsQuery.rows.reduce((rentalsArray, rental) => {
             
     // *********Pesquisando pelo jogo referenciado pelo id em 'gameId' no objeto de rentals**********
-            const rentedGameArray = gamesQuery.rows.map((game) => {
+            const rentedGameObject = gamesQuery.rows.find((game) => {
                 const {id, name, categoryId} = game
                 if(rental.gameId === game.id){
                     const rentedGame = {game: {id, name, categoryId}} 
-                    return rentedGame
+                    return true
                 }
             })
-            const rentedGame = rentedGameArray[0];
+            const {id, name, categoryId} = rentedGameObject;
+            const rentedGame = {game: {id, name, categoryId}}
 // ***************************************************************************************************
 
 // *******Pesquisando pelo nome da categoria referenciada pelo 'categoryId' no objeto de rentals******
             categoriesQuery.rows.map((category) => {
 
-                const {categoryId} = rentedGame.game;
+                const {categoryId} = rentedGame;
                 const {name} = category;
 
                 if(categoryId === category.id){
-                    rentedGame.game.categoryName = name;
+                    rentedGame.categoryName = name;
                     return true
                 }
         })
@@ -94,20 +159,54 @@ export async function getRentals(req, res){
 // ***************************************************************************************************
 
 // ***********Pesquisando pelo cliente referenciado pelo 'customerId' no objeto de rentals************
-            const customerArray = customersQuery.rows.map((customer) => {
-                const {name, id} = customer;
+            const customerObject = customersQuery.rows.find((customer) => {
                 if(customer.id === rental.customerId){
-                    const customer = {customer: {id, name}};
-                    return customer
+                    
+                    return true
                 }
-
             })
-            const customer = customerArray[0];
+            const customer = {customer: {id: customerObject.id, name: customerObject.name}};
 // ***************************************************************************************************
             
+            if(req.query.status){
+                const status = req.query.status;
+                if(status === 'closed'){
+                    if (rental.returnDate !== null){
+                        rentalsArray.push({...rental, ...customer, ...rentedGame});
+                        return rentalsArray
+                    }
+                    else{
+                        return rentalsArray
+                    }
+                }
+                else if(status === 'open'){
+                    if(rental.returnDate === null){
+                        rentalsArray.push({...rental, ...customer, ...rentedGame});
+                        return rentalsArray 
+                    }
+                    else{
+                        return rentalsArray
+                    } 
+                }
+            }
+            else if(req.query.startDate){
+                const rentDate = dayjs(rental.rentDate).format('YYYY-MM-DD');
+                const isAfter = dayjs(rentDate).isAfter(req.query.startDate, 'days');
+                if(isAfter){
+                    rentalsArray.push({...rental, ...customer, ...rentedGame});
+                    return rentalsArray 
+                }
+                else{
+                    return rentalsArray
+                }
+            } 
+            else{
 
-            return {...rental, ...customer, ...rentedGame}
-        })
+                rentalsArray.push({...rental, ...customer, ...rentedGame});
+                return rentalsArray
+            }
+
+        },[])
         res.send(rentalsJSON);
         
 
@@ -184,5 +283,59 @@ export async function deleteRental(req, res){
 
     }
 
+}
 
+export async function rentalsMetrics(req, res){
+
+    try{
+
+        if(req.query.startDate || req.query.endDate){
+            const {startDate, endDate} = req.query;
+            let startDateString, endDateString = ' ';
+
+            if(startDate){
+                    startDateString = ` "rentDate" >= '${startDate}'`
+            }
+            if(endDate){
+                if(startDate){
+                    endDateString = ` AND "rentDate" <= '${endDate}'`
+                }
+                else{
+                    startDateString = ' ';
+                    endDateString = ` "rentDate" <= '${endDate}'`
+                }
+            }
+
+            const metricsQuery = await db.query(
+                `SELECT
+                    SUM("originalPrice" + COALESCE("delayFee", 0)) AS revenue,
+                    count(*) AS rentals,
+                    AVG("originalPrice" + COALESCE("delayFee", 0)) AS average
+                 FROM rentals
+
+                 WHERE
+                    ${startDateString}
+                    ${endDateString}
+                 `
+                ,[])
+            const metrics = metricsQuery.rows[0];
+            res.send(metrics);
+
+        }
+        else{
+
+            const metricsQuery = await db.query(
+                `SELECT
+                    SUM("originalPrice" + COALESCE("delayFee", 0)) AS revenue,
+                    count(*) AS rentals,
+                    AVG("originalPrice" + COALESCE("delayFee", 0)) AS average
+                     FROM rentals `
+                ,[])
+            const metrics = metricsQuery.rows[0];
+            res.send(metrics);
+        }
+    }
+    catch(error){
+        res.status(500).send(error);
+    }
 }
