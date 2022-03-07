@@ -50,7 +50,7 @@ export async function getGames(req, res){
                     LEFT JOIN rentals
                         ON rentals."gameId" = games.id
                 WHERE 
-                    lower(games.name) LIKE lower('%${name}%')
+                    lower(games.name) LIKE lower('${name}%')
                 GROUP BY
                     games.id, categories.id
                  ${offset}

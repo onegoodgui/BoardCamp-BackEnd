@@ -36,11 +36,16 @@ export async function getCustomers(req, res){
             
             const {cpf} = req.query;
             const cpfQuery = await db.query(
-                `SELECT * 
-                 FROM 
-                    customers 
+                `SELECT 
+                    customers.*,
+                    count(rentals) AS "rentalsCount"
+                 FROM customers
+                    LEFT JOIN rentals
+                        ON rentals."customerId" = customers.id
                  WHERE 
-                    cpf LIKE '${cpf}%'
+                    customers.cpf LIKE '${cpf}%
+                GROUP BY
+                    customers.id'
                 ${offset}
                 ${limit}
             `);
@@ -54,11 +59,16 @@ export async function getCustomers(req, res){
             const {id} = req.params
 
             const idQuery = await db.query(
-                `SELECT * 
-                FROM 
-                    customers 
+                `SELECT 
+                    customers.*, 
+                    count(rentals) AS "rentalsCount"
+                FROM customers
+                   LEFT JOIN rentals
+                       ON rentals."customerId" = customers.id
                 WHERE 
-                    id = $1`
+                    customers.id = $1
+                GROUP BY
+                    customers.id`
             , [id]);
 
             const selectedUser = idQuery.rows;
@@ -71,9 +81,14 @@ export async function getCustomers(req, res){
         }
 
         const customersQuery = await db.query(
-            `SELECT * 
-            FROM 
-                customers
+            `SELECT 
+                customers.*,
+                count(rentals) AS "rentalsCount"
+            FROM customers
+                LEFT JOIN rentals
+                    ON rentals."customerId" = customers.id
+            GROUP BY
+                customers.id
             ${limit}
             ${offset}`);
         const customersList = customersQuery.rows;
